@@ -1,0 +1,4 @@
+clab-netauto/
+ansible/build/
+nornir/__pycache__/
+*.pyc

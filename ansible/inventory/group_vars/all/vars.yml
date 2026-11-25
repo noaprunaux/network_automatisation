@@ -1,0 +1,12 @@
+# Variables NON secrètes. Les secrets sont dans vault.yml (chiffré),
+# et on y fait référence ici par des variables vault_*.
+ansible_connection: ansible.netcommon.httpapi
+ansible_network_os: nokia.srlinux.srlinux
+ansible_user: "{{ vault_srl_user }}"
+ansible_password: "{{ vault_srl_password }}"
+ansible_httpapi_use_ssl: true
+ansible_httpapi_validate_certs: false
+
+# Pour l'étape NetBox (inventaire dynamique / pynetbox)
+netbox_url: "https://127.0.0.1"
+netbox_token: "{{ vault_netbox_token }}"

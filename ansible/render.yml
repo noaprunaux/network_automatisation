@@ -1,0 +1,19 @@
+# Génère les configs dans build/ SANS toucher aux équipements.
+# Usage : ansible-playbook render.yml
+- name: Générer les configurations
+  hosts: router:switch
+  gather_facts: false
+  connection: local
+  tasks:
+    - name: Créer le dossier build
+      ansible.builtin.file:
+        path: build
+        state: directory
+      run_once: true
+      delegate_to: localhost
+
+    - name: Rendre le template du rôle
+      ansible.builtin.template:
+        src: "templates/{{ device_role }}.j2"
+        dest: "build/{{ inventory_hostname }}.yml"
+      delegate_to: localhost

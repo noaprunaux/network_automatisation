@@ -1,0 +1,18 @@
+{# Switch SR Linux (L2 mac-vrf). Même format de données depuis NetBox ou depuis host_vars #}
+{% for itf in interfaces if not (itf.mgmt_only | default(false)) %}
+- path: "/interface[name={{ itf.name }}]"
+  value:
+    admin-state: enable
+    subinterface:
+      - index: 0
+        type: bridged
+        admin-state: enable
+{% endfor %}
+- path: "/network-instance[name={{ mac_vrf }}]"
+  value:
+    type: mac-vrf
+    admin-state: enable
+    interface:
+{% for itf in interfaces if not (itf.mgmt_only | default(false)) %}
+      - name: "{{ itf.name }}.0"
+{% endfor %}

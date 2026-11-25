@@ -1,0 +1,96 @@
+name: netauto
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: netauto-lab
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: [self-hosted, netauto]
+    if: github.event_name != 'schedule'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Lint YAML et syntaxe Ansible
+        run: |
+          source /home/debian/venv/bin/activate
+          yamllint -d relaxed ansible/*.yml ansible/inventory/
+          cd ansible
+          ansible-playbook --syntax-check render.yml deploy.yml verify.yml
+
+      - name: Render et Diff (dry-run)
+        env:
+          VAULT_PASS: ${{ secrets.VAULT_PASS }}
+        run: |
+          source /home/debian/venv/bin/activate
+          VAULT_FILE=$(mktemp)
+          trap "rm -f $VAULT_FILE" EXIT
+          printf '%s' "$VAULT_PASS" > "$VAULT_FILE"
+          cd ansible
+          ansible-playbook render.yml --vault-password-file "$VAULT_FILE"
+          ansible-playbook deploy.yml --check --diff --vault-password-file "$VAULT_FILE"
+
+  deploy:
+    runs-on: [self-hosted, netauto]
+    needs: check
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Déployer la config (Ansible)
+        env:
+          VAULT_PASS: ${{ secrets.VAULT_PASS }}
+        run: |
+          source /home/debian/venv/bin/activate
+          VAULT_FILE=$(mktemp)
+          trap "rm -f $VAULT_FILE" EXIT
+          printf '%s' "$VAULT_PASS" > "$VAULT_FILE"
+          cd ansible
+          ansible-playbook deploy.yml --diff --vault-password-file "$VAULT_FILE"
+
+      - name: Vérifier BGP et ping (Ansible)
+        env:
+          VAULT_PASS: ${{ secrets.VAULT_PASS }}
+        run: |
+          source /home/debian/venv/bin/activate
+          VAULT_FILE=$(mktemp)
+          trap "rm -f $VAULT_FILE" EXIT
+          printf '%s' "$VAULT_PASS" > "$VAULT_FILE"
+          cd ansible
+          ansible-playbook verify.yml --vault-password-file "$VAULT_FILE"
+
+      - name: Valider l'état réel (Nornir)
+        run: |
+          source /home/debian/venv/bin/activate
+          cd nornir
+          python validate.py
+
+      - name: Sauvegarder les configs (Nornir)
+        run: |
+          source /home/debian/venv/bin/activate
+          cd nornir
+          python backup.py
+
+  drift:
+    runs-on: [self-hosted, netauto]
+    if: github.event_name == 'schedule'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Détection de dérive (Nornir)
+        run: |
+          source /home/debian/venv/bin/activate
+          cd nornir
+          python validate.py

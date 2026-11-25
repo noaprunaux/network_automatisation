@@ -1,0 +1,4 @@
+mac_vrf: lan-b
+interfaces:
+  - name: ethernet-1/1
+  - name: ethernet-1/2

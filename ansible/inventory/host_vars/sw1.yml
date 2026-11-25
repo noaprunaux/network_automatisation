@@ -1,0 +1,4 @@
+mac_vrf: lan-a
+interfaces:
+  - name: ethernet-1/1
+  - name: ethernet-1/2

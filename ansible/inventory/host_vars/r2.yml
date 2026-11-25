@@ -1,0 +1,12 @@
+asn: 65002
+router_id: 10.0.12.2
+interfaces:
+  - name: ethernet-1/1
+    ip_addresses:
+      - address: 192.168.20.1/24
+  - name: ethernet-1/2
+    ip_addresses:
+      - address: 10.0.12.2/30
+bgp_neighbors:
+  - ip: 10.0.12.1
+    peer_as: 65001

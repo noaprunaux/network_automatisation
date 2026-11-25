@@ -1,0 +1,52 @@
+{# Routeur SR Linux. Même format de données depuis NetBox ou depuis host_vars :
+   interfaces[].name, interfaces[].ip_addresses[].address, interfaces[].mgmt_only #}
+- path: "/routing-policy"
+  value:
+    policy:
+      - name: export-local
+        statement:
+          - name: "10"
+            match:
+              protocol: local
+            action:
+              policy-result: accept
+      - name: accept-all
+        default-action:
+          policy-result: accept
+{% for itf in interfaces if not (itf.mgmt_only | default(false)) and (itf.ip_addresses | default([])) %}
+- path: "/interface[name={{ itf.name }}]"
+  value:
+    admin-state: enable
+    subinterface:
+      - index: 0
+        admin-state: enable
+        ipv4:
+          admin-state: enable
+          address:
+            - ip-prefix: "{{ itf.ip_addresses[0].address }}"
+{% endfor %}
+- path: "/network-instance[name=default]"
+  value:
+    admin-state: enable
+    interface:
+{% for itf in interfaces if not (itf.mgmt_only | default(false)) and (itf.ip_addresses | default([])) %}
+      - name: "{{ itf.name }}.0"
+{% endfor %}
+    protocols:
+      bgp:
+        admin-state: enable
+        autonomous-system: {{ asn }}
+        router-id: "{{ router_id }}"
+        afi-safi:
+          - afi-safi-name: ipv4-unicast
+            admin-state: enable
+        group:
+          - group-name: ebgp
+            export-policy: [export-local]
+            import-policy: [accept-all]
+        neighbor:
+{% for n in bgp_neighbors %}
+          - peer-address: "{{ n.ip }}"
+            peer-group: ebgp
+            peer-as: {{ n.peer_as }}
+{% endfor %}

@@ -1,0 +1,16 @@
+# Pousse la configuration sur les équipements.
+# Dry-run   : ansible-playbook deploy.yml --check --diff
+# Déploiement : ansible-playbook deploy.yml --diff
+- name: Déployer la configuration SR Linux
+  hosts: router:switch
+  gather_facts: false
+  tasks:
+    - name: Appliquer la config générée depuis le template du rôle
+      nokia.srlinux.config:
+        update: "{{ lookup('ansible.builtin.template', 'templates/' ~ device_role ~ '.j2') | from_yaml }}"
+      register: result
+
+    - name: Afficher ce qui a changé
+      ansible.builtin.debug:
+        var: result.diff
+      when: result.changed
