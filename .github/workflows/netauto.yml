@@ -71,14 +71,26 @@ jobs:
           ansible-playbook verify.yml --vault-password-file "$VAULT_FILE"
 
       - name: Valider l'état réel (Nornir)
+        env:
+          VAULT_PASS: ${{ secrets.VAULT_PASS }}
         run: |
           source /home/debian/venv/bin/activate
+          VAULT_FILE=$(mktemp)
+          trap "rm -f $VAULT_FILE" EXIT
+          printf '%s' "$VAULT_PASS" > "$VAULT_FILE"
+          export ANSIBLE_VAULT_PASSWORD_FILE="$VAULT_FILE"
           cd nornir
           python validate.py
 
       - name: Sauvegarder les configs (Nornir)
+        env:
+          VAULT_PASS: ${{ secrets.VAULT_PASS }}
         run: |
           source /home/debian/venv/bin/activate
+          VAULT_FILE=$(mktemp)
+          trap "rm -f $VAULT_FILE" EXIT
+          printf '%s' "$VAULT_PASS" > "$VAULT_FILE"
+          export ANSIBLE_VAULT_PASSWORD_FILE="$VAULT_FILE"
           cd nornir
           python backup.py
 
@@ -90,7 +102,13 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Détection de dérive (Nornir)
+        env:
+          VAULT_PASS: ${{ secrets.VAULT_PASS }}
         run: |
           source /home/debian/venv/bin/activate
+          VAULT_FILE=$(mktemp)
+          trap "rm -f $VAULT_FILE" EXIT
+          printf '%s' "$VAULT_PASS" > "$VAULT_FILE"
+          export ANSIBLE_VAULT_PASSWORD_FILE="$VAULT_FILE"
           cd nornir
           python validate.py
