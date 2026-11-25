@@ -13,6 +13,9 @@ concurrency:
   group: netauto-lab
   cancel-in-progress: false
 
+# Inventaire Ansible = NetBox (ansible.cfg). Le token NetBox est lu dans le vault
+# à chaque étape Ansible, puis masqué dans les logs.
+
 jobs:
   check:
     runs-on: [self-hosted, netauto]
@@ -26,7 +29,7 @@ jobs:
           source /home/debian/venv/bin/activate
           yamllint -d relaxed ansible/*.yml ansible/inventory/
           cd ansible
-          ansible-playbook --syntax-check render.yml deploy.yml verify.yml
+          ansible-playbook --syntax-check -i inventory/hosts.yml render.yml deploy.yml verify.yml
 
       - name: Render et Diff (dry-run)
         env:
@@ -37,6 +40,8 @@ jobs:
           trap "rm -f $VAULT_FILE" EXIT
           printf '%s' "$VAULT_PASS" > "$VAULT_FILE"
           cd ansible
+          export NETBOX_TOKEN=$(ansible-vault view --vault-password-file "$VAULT_FILE" inventory/group_vars/all/vault.yml | awk '/vault_netbox_token/ {print $2}' | tr -d '"')
+          echo "::add-mask::$NETBOX_TOKEN"
           ansible-playbook render.yml --vault-password-file "$VAULT_FILE"
           ansible-playbook deploy.yml --check --diff --vault-password-file "$VAULT_FILE"
 
@@ -57,6 +62,8 @@ jobs:
           trap "rm -f $VAULT_FILE" EXIT
           printf '%s' "$VAULT_PASS" > "$VAULT_FILE"
           cd ansible
+          export NETBOX_TOKEN=$(ansible-vault view --vault-password-file "$VAULT_FILE" inventory/group_vars/all/vault.yml | awk '/vault_netbox_token/ {print $2}' | tr -d '"')
+          echo "::add-mask::$NETBOX_TOKEN"
           ansible-playbook deploy.yml --diff --vault-password-file "$VAULT_FILE"
 
       - name: Vérifier BGP et ping (Ansible)
@@ -68,6 +75,8 @@ jobs:
           trap "rm -f $VAULT_FILE" EXIT
           printf '%s' "$VAULT_PASS" > "$VAULT_FILE"
           cd ansible
+          export NETBOX_TOKEN=$(ansible-vault view --vault-password-file "$VAULT_FILE" inventory/group_vars/all/vault.yml | awk '/vault_netbox_token/ {print $2}' | tr -d '"')
+          echo "::add-mask::$NETBOX_TOKEN"
           ansible-playbook verify.yml --vault-password-file "$VAULT_FILE"
 
       - name: Valider l'état réel (Nornir)
@@ -101,7 +110,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Détection de dérive (Nornir)
+      - name: Dérive d'état (Nornir)
         env:
           VAULT_PASS: ${{ secrets.VAULT_PASS }}
         run: |
@@ -112,3 +121,22 @@ jobs:
           export ANSIBLE_VAULT_PASSWORD_FILE="$VAULT_FILE"
           cd nornir
           python validate.py
+
+      - name: Dérive de configuration (Ansible vs NetBox)
+        if: always()
+        env:
+          VAULT_PASS: ${{ secrets.VAULT_PASS }}
+        run: |
+          source /home/debian/venv/bin/activate
+          VAULT_FILE=$(mktemp)
+          trap "rm -f $VAULT_FILE" EXIT
+          printf '%s' "$VAULT_PASS" > "$VAULT_FILE"
+          cd ansible
+          export NETBOX_TOKEN=$(ansible-vault view --vault-password-file "$VAULT_FILE" inventory/group_vars/all/vault.yml | awk '/vault_netbox_token/ {print $2}' | tr -d '"')
+          echo "::add-mask::$NETBOX_TOKEN"
+          ansible-playbook deploy.yml --check --diff --vault-password-file "$VAULT_FILE" | tee drift.log
+          if grep -Eq "changed=[1-9]" drift.log; then
+            echo "::error::Dérive de configuration : le réseau ne correspond plus à NetBox"
+            exit 1
+          fi
+          echo "Aucune dérive de configuration"
