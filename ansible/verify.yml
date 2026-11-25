@@ -1,7 +1,11 @@
-# Vérification rapide après déploiement.
+# Vérification après déploiement, sans aucune IP en dur :
+# tout est lu dans l'inventaire (NetBox par défaut, ou inventory/hosts.yml).
 # Usage : ansible-playbook verify.yml
-# (La 3e personne pourra transformer ça en vrais tests pytest/Nornir.)
-- name: Vérifier l'état BGP sur les routeurs
+#
+# Convention : chaque client (groupe "container") a son interface de données "eth1".
+# Le nom du conteneur Docker = nom de l'hôte, sauf si la variable container_name est définie.
+
+- name: Vérifier les sessions BGP sur les routeurs
   hosts: router
   gather_facts: false
   tasks:
@@ -12,7 +16,7 @@
         paths:
           - path: "/network-instance[name=default]/protocols/bgp/neighbor[peer-address={{ item.ip }}]/session-state"
             datastore: state
-      loop: "{{ bgp_neighbors }}"
+      loop: "{{ bgp_neighbors | default([]) }}"
       loop_control:
         label: "{{ inventory_hostname }} -> {{ item.ip }}"
       register: bgp
@@ -20,15 +24,33 @@
       retries: 12
       delay: 10
 
-- name: Test de bout en bout
+- name: Connectivité de bout en bout entre tous les clients
   hosts: localhost
   connection: local
   gather_facts: false
+  vars:
+    clients: "{{ groups['container'] | default([]) }}"
   tasks:
-    - name: Ping client1 -> client2
-      ansible.builtin.command: docker exec clab-netauto-client1 ping -c 3 -W 1 192.168.20.10
-      changed_when: false
+    - name: Vérifier qu'il y a au moins deux clients à tester
+      ansible.builtin.assert:
+        that: clients | length >= 2
+        fail_msg: "Moins de deux clients (groupe 'container') dans l'inventaire : aucun ping possible"
+        quiet: true
 
-    - name: Ping client2 -> client1
-      ansible.builtin.command: docker exec clab-netauto-client2 ping -c 3 -W 1 192.168.10.10
+    - name: Ping entre chaque paire de clients
+      ansible.builtin.command:
+        argv:
+          - docker
+          - exec
+          - "{{ hostvars[item.0].container_name | default(item.0) }}"
+          - ping
+          - -c
+          - "3"
+          - -W
+          - "1"
+          - "{{ (hostvars[item.1].interfaces | selectattr('name', 'equalto', 'eth1') | first).ip_addresses[0].address.split('/')[0] }}"
+      loop: "{{ clients | product(clients) | list }}"
+      loop_control:
+        label: "{{ item.0 }} -> {{ item.1 }}"
+      when: item.0 != item.1
       changed_when: false

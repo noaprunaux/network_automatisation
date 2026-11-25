@@ -1,13 +1,11 @@
 inventory:
-  plugin: SimpleInventory
-  options:
-    host_file: inventory/hosts.yaml
-    group_file: inventory/groups.yaml
+  # Inventaire = celui d'Ansible (NetBox par défaut), voir common.py
+  plugin: AnsibleInventory
 
 runner:
   plugin: threaded
   options:
-    num_workers: 4     # les 4 équipements traités en parallèle
+    num_workers: 4     # équipements traités en parallèle
 
 logging:
   enabled: false

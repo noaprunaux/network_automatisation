@@ -13,8 +13,8 @@ concurrency:
   group: netauto-lab
   cancel-in-progress: false
 
-# Inventaire Ansible = NetBox (ansible.cfg). Le token NetBox est lu dans le vault
-# à chaque étape Ansible, puis masqué dans les logs.
+# Inventaire Ansible ET Nornir = NetBox (ansible.cfg). Le token NetBox est lu dans
+# le vault à chaque étape, puis masqué dans les logs.
 
 jobs:
   check:
@@ -88,6 +88,8 @@ jobs:
           trap "rm -f $VAULT_FILE" EXIT
           printf '%s' "$VAULT_PASS" > "$VAULT_FILE"
           export ANSIBLE_VAULT_PASSWORD_FILE="$VAULT_FILE"
+          export NETBOX_TOKEN=$(ansible-vault view ansible/inventory/group_vars/all/vault.yml | awk '/vault_netbox_token/ {print $2}' | tr -d '"')
+          echo "::add-mask::$NETBOX_TOKEN"
           cd nornir
           python validate.py
 
@@ -100,6 +102,8 @@ jobs:
           trap "rm -f $VAULT_FILE" EXIT
           printf '%s' "$VAULT_PASS" > "$VAULT_FILE"
           export ANSIBLE_VAULT_PASSWORD_FILE="$VAULT_FILE"
+          export NETBOX_TOKEN=$(ansible-vault view ansible/inventory/group_vars/all/vault.yml | awk '/vault_netbox_token/ {print $2}' | tr -d '"')
+          echo "::add-mask::$NETBOX_TOKEN"
           cd nornir
           python backup.py
 
@@ -119,6 +123,8 @@ jobs:
           trap "rm -f $VAULT_FILE" EXIT
           printf '%s' "$VAULT_PASS" > "$VAULT_FILE"
           export ANSIBLE_VAULT_PASSWORD_FILE="$VAULT_FILE"
+          export NETBOX_TOKEN=$(ansible-vault view ansible/inventory/group_vars/all/vault.yml | awk '/vault_netbox_token/ {print $2}' | tr -d '"')
+          echo "::add-mask::$NETBOX_TOKEN"
           cd nornir
           python validate.py
 

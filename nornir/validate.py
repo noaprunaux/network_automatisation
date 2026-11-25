@@ -1,17 +1,18 @@
 """Validation de l'état réel du réseau par rapport à l'état attendu.
 
 Nornir (orchestration) + NAPALM (getters normalisés, indépendants du constructeur).
-L'état attendu est lu dans les host_vars Ansible.
+L'état attendu (interfaces, voisins BGP) est lu dans l'inventaire Ansible, donc NetBox.
 
 Usage : python validate.py   -> code retour 0 si tout est conforme, 1 sinon
 """
+import logging
 import sys
 
 from nornir.core.task import Result, Task
 from nornir_napalm.plugins.tasks import napalm_get
 from nornir_utils.plugins.functions import print_result
 
-from common import expected, expected_interfaces, get_nornir
+from common import expected_bgp_neighbors, expected_interfaces, get_nornir
 
 
 def check_device(task: Task) -> Result:
@@ -20,11 +21,12 @@ def check_device(task: Task) -> Result:
     if task.host.data.get("role") == "router":
         getters.append("bgp_neighbors")
 
-    data = task.run(task=napalm_get, getters=getters).result
+    # severity DEBUG : le résultat brut de NAPALM n'est pas affiché, seul le rapport l'est
+    data = task.run(task=napalm_get, getters=getters, severity_level=logging.DEBUG).result
     ok, errors = [], []
 
     # 1. Interfaces attendues opérationnelles
-    for itf in expected_interfaces(host):
+    for itf in expected_interfaces(task.host):
         state = data["interfaces"].get(itf)
         if state and state.get("is_up"):
             ok.append(f"interface {itf} up")
@@ -34,7 +36,7 @@ def check_device(task: Task) -> Result:
     # 2. Sessions BGP établies (routeurs uniquement)
     if "bgp_neighbors" in getters:
         peers = data["bgp_neighbors"].get("global", {}).get("peers", {})
-        for n in expected(host).get("bgp_neighbors", []):
+        for n in expected_bgp_neighbors(task.host):
             peer = peers.get(n["ip"])
             if peer and peer.get("is_up"):
                 ok.append(f"BGP {n['ip']} (AS {n['peer_as']}) établi")

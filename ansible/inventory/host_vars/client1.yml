@@ -1,0 +1,4 @@
+interfaces:
+  - name: eth1
+    ip_addresses:
+      - address: 192.168.10.10/24

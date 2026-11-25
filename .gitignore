@@ -2,3 +2,5 @@ clab-netauto/
 ansible/build/
 nornir/__pycache__/
 *.pyc
+nornir/backups/
+nornir/backups/
