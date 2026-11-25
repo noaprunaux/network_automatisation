@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NetAuto Studio</title>
+  <link rel="stylesheet" href="static/style.css" />
+  <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo-dot"></span>
+      <h1>NetAuto Studio</h1>
+      <nav class="tabs" aria-label="Vues">
+        <button id="tab-topology" type="button" class="tab-btn active" data-view="topology">Topologie</button>
+        <button id="tab-tests" type="button" class="tab-btn" data-view="tests">Tests</button>
+        <button id="tab-grafana" type="button" class="tab-btn" data-view="grafana">Supervision</button>
+      </nav>
+    </div>
+
+    <div class="controls">
+      <label for="lab-select">Lab :</label>
+      <select id="lab-select" aria-label="Sélectionner un lab"></select>
+      <span id="mode-badge" class="badge badge-readonly hidden">Lecture seule</span>
+      <button id="btn-new-lab" type="button" class="btn btn-success">+ Nouveau lab</button>
+      <button id="btn-refresh" type="button" class="btn btn-secondary">Rafraîchir</button>
+      <button id="btn-fit" type="button" class="btn btn-secondary">Recentrer</button>
+    </div>
+  </header>
+
+  <div id="editor-toolbar" class="toolbar hidden">
+    <div class="toolbar-group">
+      <button id="btn-add-router" type="button" class="btn btn-tool btn-router">+ Routeur</button>
+      <button id="btn-add-switch" type="button" class="btn btn-tool btn-switch">+ Switch</button>
+      <button id="btn-add-client" type="button" class="btn btn-tool btn-client">+ Client</button>
+      <span class="sep"></span>
+      <button id="btn-link-mode" type="button" class="btn btn-tool btn-secondary">Relier 2 nœuds</button>
+      <button id="btn-delete-selected" type="button" class="btn btn-tool btn-danger" disabled>Supprimer sélection</button>
+    </div>
+    <div class="toolbar-group">
+      <span id="link-hint" class="hint hidden">Cliquez sur le 1er nœud...</span>
+      <button id="btn-save-netbox" type="button" class="btn btn-secondary">Enregistrer</button>
+      <button id="btn-preview" type="button" class="btn btn-secondary">Aperçu (diff)</button>
+      <button id="btn-apply" type="button" class="btn btn-primary">Appliquer</button>
+      <button id="btn-destroy-lab" type="button" class="btn btn-danger hidden">Détruire le lab</button>
+      <button id="btn-toggle-console" type="button" class="btn btn-secondary">Console</button>
+    </div>
+  </div>
+
+  <main id="view-topology" class="workspace">
+    <section class="canvas-column">
+      <div class="canvas-pane">
+        <div id="network-graph"></div>
+        <div id="status-banner" class="status-banner hidden"></div>
+        <div class="legend">
+          <span><i class="dot dot-router"></i> Routeur</span>
+          <span><i class="dot dot-switch"></i> Switch</span>
+          <span><i class="dot dot-container"></i> Client</span>
+        </div>
+      </div>
+
+      <section id="console-drawer" class="console-drawer hidden">
+        <div class="console-header">
+          <div class="console-title">
+            <strong id="console-title-text">Console d'exécution</strong>
+            <span id="console-summary" class="muted"></span>
+          </div>
+          <button id="btn-close-console" type="button" class="btn btn-secondary btn-xs">Masquer</button>
+        </div>
+        <div id="console-steps" class="console-steps"></div>
+        <pre id="console-logs" class="console-logs"></pre>
+      </section>
+    </section>
+
+    <aside class="sidebar">
+      <div class="card">
+        <h2>Résumé du lab</h2>
+        <div id="lab-summary" class="summary-grid">
+          <p class="muted">Chargement...</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Propriétés</h2>
+        <div id="details-panel">
+          <p class="muted">Cliquez sur un nœud ou un lien dans le graphe pour inspecter ses propriétés.</p>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- Vue Tests : Ping + état BGP / interfaces en direct -->
+  <section id="view-tests" class="panel-view hidden">
+    <div class="tests-layout">
+      <div class="card">
+        <div class="card-header">
+          <h2>Test de connectivité (Ping client ↔ client)</h2>
+          <span id="ping-badge" class="badge hidden"></span>
+        </div>
+        <div class="ping-form">
+          <label>Source :
+            <select id="ping-source"></select>
+          </label>
+          <span class="muted">→</span>
+          <label>Destination :
+            <select id="ping-target"></select>
+          </label>
+          <button id="btn-run-ping" type="button" class="btn btn-primary">Lancer le ping</button>
+        </div>
+        <pre id="ping-output" class="console-logs ping-output">Choisissez deux clients puis cliquez sur « Lancer le ping ».</pre>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2>État en direct (SR Linux JSON-RPC : Interfaces &amp; BGP)</h2>
+          <div class="toolbar-group">
+            <span id="status-global-badge" class="badge hidden"></span>
+            <button id="btn-refresh-status" type="button" class="btn btn-secondary">Rafraîchir l'état</button>
+          </div>
+        </div>
+        <div id="live-status-grid" class="status-grid">
+          <p class="muted">Cliquez sur « Rafraîchir l'état » pour interroger les équipements SR Linux.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Vue Supervision : Grafana intégré -->
+  <section id="view-grafana" class="panel-view grafana-view hidden">
+    <div class="grafana-bar">
+      <label for="grafana-url">URL Grafana :</label>
+      <input id="grafana-url" type="text" value="/grafana/?orgId=1&amp;theme=dark" />
+      <button id="btn-load-grafana" type="button" class="btn btn-secondary">Charger</button>
+      <a id="link-open-grafana" href="/grafana/" target="_blank" rel="noopener" class="btn btn-primary">Ouvrir Grafana ↗</a>
+    </div>
+    <iframe id="grafana-iframe" class="grafana-iframe" title="Supervision Grafana"></iframe>
+  </section>
+
+  <!-- Modale de création d'un nouveau lab -->
+  <div id="modal-new-lab" class="modal hidden">
+    <div class="modal-card">
+      <h3>Créer un nouveau lab</h3>
+      <form id="form-new-lab">
+        <label class="field-label" for="input-lab-name">Nom du lab</label>
+        <input
+          id="input-lab-name"
+          type="text"
+          required
+          pattern="^[a-z][a-z0-9-]{1,15}$"
+          placeholder="ex. demo"
+          autocomplete="off"
+        />
+        <p class="field-help">2 à 16 caractères minuscules (lettres, chiffres, tirets), différent de <code>netauto</code>.</p>
+
+        <label class="field-label" for="select-template">Point de départ</label>
+        <select id="select-template">
+          <option value="empty">Topologie vide (dessiner soi-même)</option>
+          <option value="classic">Modèle 2 routeurs / 2 switchs / 2 clients</option>
+        </select>
+
+        <div class="modal-actions">
+          <button id="btn-cancel-modal" type="button" class="btn btn-secondary">Annuler</button>
+          <button type="submit" class="btn btn-primary">Créer en brouillon</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="static/app.js"></script>
+</body>
+</html>

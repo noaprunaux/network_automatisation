@@ -1,6 +1,9 @@
 clab-netauto/
 ansible/build/
 nornir/__pycache__/
+**/__pycache__/
 *.pyc
+.pytest_cache/
 nornir/backups/
-nornir/backups/
+labs/
+netauto_lab.yml.orig

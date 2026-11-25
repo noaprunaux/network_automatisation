@@ -1,65 +1,82 @@
-# Topologie projet automatisation réseau
-#
-#  client1 ── sw1 ── r1 ════ r2 ── sw2 ── client2
-#  LAN A 192.168.10.0/24   10.0.12.0/30   LAN B 192.168.20.0/24
-#
-# Les routeurs et les switchs démarrent SANS configuration :
-# c'est la chaîne d'automatisation (NetBox -> Ansible) qui pousse
-# les interfaces, le bridging L2 et le BGP.
-#
-# Déploiement :  sudo containerlab deploy -t netauto.clab.yml
-# Destruction :  sudo containerlab destroy -t netauto.clab.yml --cleanup
-
+# Fichier généré automatiquement par NetAuto Studio depuis NetBox (lab : netauto)
 name: netauto
-
 mgmt:
   network: netauto-mgmt
   ipv4-subnet: 172.20.20.0/24
-
 topology:
   kinds:
     nokia_srlinux:
       image: ghcr.io/nokia/srlinux:latest
     linux:
       image: ghcr.io/hellt/network-multitool
-
   nodes:
-    # ---------- Routeurs ----------
     r1:
       kind: nokia_srlinux
       mgmt-ipv4: 172.20.20.11
     r2:
       kind: nokia_srlinux
       mgmt-ipv4: 172.20.20.12
-
-    # ---------- Switchs (SR Linux en mode L2 / mac-vrf) ----------
+    r3:
+      kind: nokia_srlinux
+      mgmt-ipv4: 172.20.20.13
     sw1:
       kind: nokia_srlinux
       mgmt-ipv4: 172.20.20.21
     sw2:
       kind: nokia_srlinux
       mgmt-ipv4: 172.20.20.22
-
-    # ---------- Clients ----------
+    sw3:
+      kind: nokia_srlinux
+      mgmt-ipv4: 172.20.20.14
     client1:
       kind: linux
       mgmt-ipv4: 172.20.20.31
       exec:
-        - ip addr add 192.168.10.10/24 dev eth1
-        - ip route add 192.168.20.0/24 via 192.168.10.1 dev eth1
+      - ip addr add 192.168.10.10/24 dev eth1
+      - ip route replace default via 192.168.10.1 dev eth1
     client2:
       kind: linux
       mgmt-ipv4: 172.20.20.32
       exec:
-        - ip addr add 192.168.20.10/24 dev eth1
-        - ip route add 192.168.10.0/24 via 192.168.20.1 dev eth1
-
+      - ip addr add 192.168.20.10/24 dev eth1
+      - ip route replace default via 192.168.20.1 dev eth1
+    client3:
+      kind: linux
+      mgmt-ipv4: 172.20.20.33
+      exec:
+      - ip addr add 192.168.20.11/24 dev eth1
+      - ip route replace default via 192.168.20.1 dev eth1
+    client4:
+      kind: linux
+      mgmt-ipv4: 172.20.20.15
+      exec:
+      - ip addr add 192.168.2.10/24 dev eth1
+      - ip route replace default via 192.168.2.1 dev eth1
   links:
-    # LAN A
-    - endpoints: ["client1:eth1", "sw1:e1-1"]
-    - endpoints: ["sw1:e1-2", "r1:e1-1"]
-    # Lien inter-routeurs
-    - endpoints: ["r1:e1-2", "r2:e1-2"]
-    # LAN B
-    - endpoints: ["r2:e1-1", "sw2:e1-2"]
-    - endpoints: ["sw2:e1-1", "client2:eth1"]
+  - endpoints:
+    - client1:eth1
+    - sw1:e1-1
+  - endpoints:
+    - client2:eth1
+    - sw2:e1-1
+  - endpoints:
+    - client3:eth1
+    - sw2:e1-2
+  - endpoints:
+    - client4:eth1
+    - sw3:e1-1
+  - endpoints:
+    - r1:e1-1
+    - r2:e1-1
+  - endpoints:
+    - r1:e1-2
+    - sw1:e1-2
+  - endpoints:
+    - r2:e1-2
+    - r3:e1-1
+  - endpoints:
+    - r2:e1-3
+    - sw2:e1-3
+  - endpoints:
+    - r3:e1-2
+    - sw3:e1-2
