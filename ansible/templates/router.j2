@@ -10,6 +10,11 @@
               protocol: local
             action:
               policy-result: accept
+          - name: "20"
+            match:
+              protocol: bgp
+            action:
+              policy-result: accept
       - name: accept-all
         default-action:
           policy-result: accept
