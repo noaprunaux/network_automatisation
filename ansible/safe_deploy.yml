@@ -1,0 +1,137 @@
+# Déploiement sécurisé avec retour arrière automatique.
+#
+#   1. checkpoint SR Linux sur chaque équipement
+#   2. déploiement de la configuration (comme deploy.yml)
+#   3. vérification : BGP établi + ping entre tous les clients (comme verify.yml)
+#   4. en cas d'échec à l'étape 2 ou 3 : retour au checkpoint sur TOUS les équipements,
+#      puis échec du playbook (le pipeline passe au rouge)
+#
+# Usage :
+#   ansible-playbook safe_deploy.yml --diff
+#   ansible-playbook safe_deploy.yml --diff -e verify_retries=3   # démo : abandon après ~30 s
+#
+# Après un retour arrière, le réseau est revenu à l'état sûr, mais NetBox contient
+# toujours la modification fautive : c'est NetBox qu'il faut corriger.
+
+- name: 1. Checkpoint avant déploiement
+  hosts: router:switch
+  gather_facts: false
+  any_errors_fatal: true   # pas de checkpoint sur un équipement = on ne déploie nulle part
+  tasks:
+    - name: Nom du checkpoint (identique sur tous les équipements)
+      ansible.builtin.set_fact:
+        checkpoint_name: "ansible-{{ lookup('ansible.builtin.pipe', 'date +%Y%m%d-%H%M%S') }}"
+      run_once: true
+
+    - name: Créer le checkpoint
+      nokia.srlinux.cli:
+        commands:
+          - tools system configuration generate-checkpoint name {{ checkpoint_name }} comment "avant deploiement Ansible"
+
+- name: 2. Déploiement
+  hosts: router:switch
+  gather_facts: false
+  tasks:
+    - name: Appliquer la configuration générée depuis le template du rôle
+      nokia.srlinux.config:
+        update: "{{ lookup('ansible.builtin.template', 'templates/' ~ device_role ~ '.j2') | from_yaml }}"
+      register: deploy_result
+      ignore_errors: true
+
+    - name: Retenir le résultat du déploiement
+      ansible.builtin.set_fact:
+        deploy_ok: "{{ deploy_result is succeeded }}"
+
+- name: 3a. Vérification BGP
+  hosts: router
+  gather_facts: false
+  vars:
+    verify_retries: 12   # x 10 s = 2 min
+  tasks:
+    - name: Attendre que les sessions BGP soient établies
+      nokia.srlinux.get:
+        paths:
+          - path: "/network-instance[name=default]/protocols/bgp/neighbor[peer-address={{ item.ip }}]/session-state"
+            datastore: state
+      loop: "{{ bgp_neighbors | default([]) }}"
+      loop_control:
+        label: "{{ inventory_hostname }} -> {{ item.ip }}"
+      register: bgp
+      until: bgp.result[0] == 'established'
+      retries: "{{ verify_retries }}"
+      delay: 10
+      ignore_errors: true
+      when: deploy_ok | bool
+
+    - name: Retenir le résultat BGP
+      ansible.builtin.set_fact:
+        bgp_ok: "{{ (deploy_ok | bool) and (bgp is succeeded) }}"
+
+- name: 3b. Vérification de bout en bout et décision
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    clients: "{{ groups['container'] | default([]) }}"
+    routers: "{{ groups['router'] | default([]) }}"
+    devices: "{{ routers + groups['switch'] | default([]) }}"
+  tasks:
+    - name: Ping entre chaque paire de clients
+      ansible.builtin.command:
+        argv:
+          - docker
+          - exec
+          - "{{ hostvars[item.0].container_name | default(item.0) }}"
+          - ping
+          - -c
+          - "3"
+          - -W
+          - "1"
+          - "{{ (hostvars[item.1].interfaces | selectattr('name', 'equalto', 'eth1') | first).ip_addresses[0].address.split('/')[0] }}"
+      loop: "{{ clients | product(clients) | list }}"
+      loop_control:
+        label: "{{ item.0 }} -> {{ item.1 }}"
+      when: item.0 != item.1
+      changed_when: false
+      register: pings
+      ignore_errors: true
+
+    - name: Bilan
+      ansible.builtin.set_fact:
+        failed_deploy: "{{ devices | zip(devices | map('extract', hostvars) | map(attribute='deploy_ok', default=false)) | rejectattr('1') | map(attribute='0') | list }}"
+        failed_bgp: "{{ routers | zip(routers | map('extract', hostvars) | map(attribute='bgp_ok', default=false)) | rejectattr('1') | map(attribute='0') | list }}"
+        pings_ok: "{{ (clients | length >= 2) and (pings is succeeded) }}"
+
+    - name: Décision
+      ansible.builtin.set_fact:
+        rollback_needed: "{{ (failed_deploy | length > 0) or (failed_bgp | length > 0) or not (pings_ok | bool) }}"
+
+    - name: Afficher le bilan
+      ansible.builtin.debug:
+        msg:
+          - "Déploiement en échec : {{ failed_deploy | default([]) }}"
+          - "BGP non établi      : {{ failed_bgp | default([]) }}"
+          - "Pings clients       : {{ 'OK' if pings_ok | bool else 'ÉCHEC' }}"
+          - "{{ 'RETOUR ARRIÈRE sur tous les équipements' if rollback_needed | bool else 'Tout est conforme : nouvelle configuration conservée' }}"
+
+- name: 4. Retour arrière si nécessaire
+  hosts: router:switch
+  gather_facts: false
+  tasks:
+    - name: Revenir au checkpoint
+      nokia.srlinux.cli:
+        commands:
+          - tools system configuration checkpoint {{ checkpoint_name }} revert
+      when: hostvars['localhost'].rollback_needed | bool
+
+- name: 5. Résultat final
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Échouer si un retour arrière a été effectué
+      ansible.builtin.fail:
+        msg: >-
+          Déploiement annulé : retour au checkpoint {{ hostvars[groups['router'][0]].checkpoint_name }}
+          effectué sur tous les équipements. Corriger les données dans NetBox puis relancer.
+      when: rollback_needed | bool
