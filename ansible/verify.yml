@@ -54,3 +54,9 @@
         label: "{{ item.0 }} -> {{ item.1 }}"
       when: item.0 != item.1
       changed_when: false
+      # Les routes BGP arrivent quelques secondes après l'établissement de la session :
+      # on réessaie avant de conclure à un échec.
+      register: ping_try
+      until: (ping_try.rc | default(1)) == 0
+      retries: "{{ ping_retries | default(5) }}"
+      delay: 3
