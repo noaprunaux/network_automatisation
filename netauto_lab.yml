@@ -36,7 +36,7 @@ topology:
       - ip route replace default via 192.168.20.1 dev eth1
     client3:
       kind: linux
-      mgmt-ipv4: 172.20.20.33
+      mgmt-ipv4: 172.20.20.34
       exec:
       - ip addr add 192.168.20.11/24 dev eth1
       - ip route replace default via 192.168.20.1 dev eth1
