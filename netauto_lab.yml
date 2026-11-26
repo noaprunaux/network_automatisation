@@ -16,18 +16,12 @@ topology:
     r2:
       kind: nokia_srlinux
       mgmt-ipv4: 172.20.20.12
-    r3:
-      kind: nokia_srlinux
-      mgmt-ipv4: 172.20.20.13
     sw1:
       kind: nokia_srlinux
       mgmt-ipv4: 172.20.20.21
     sw2:
       kind: nokia_srlinux
       mgmt-ipv4: 172.20.20.22
-    sw3:
-      kind: nokia_srlinux
-      mgmt-ipv4: 172.20.20.14
     client1:
       kind: linux
       mgmt-ipv4: 172.20.20.31
@@ -46,12 +40,6 @@ topology:
       exec:
       - ip addr add 192.168.20.11/24 dev eth1
       - ip route replace default via 192.168.20.1 dev eth1
-    client4:
-      kind: linux
-      mgmt-ipv4: 172.20.20.15
-      exec:
-      - ip addr add 192.168.2.10/24 dev eth1
-      - ip route replace default via 192.168.2.1 dev eth1
   links:
   - endpoints:
     - client1:eth1
@@ -63,9 +51,6 @@ topology:
     - client3:eth1
     - sw2:e1-2
   - endpoints:
-    - client4:eth1
-    - sw3:e1-1
-  - endpoints:
     - r1:e1-1
     - r2:e1-1
   - endpoints:
@@ -73,10 +58,4 @@ topology:
     - sw1:e1-2
   - endpoints:
     - r2:e1-2
-    - r3:e1-1
-  - endpoints:
-    - r2:e1-3
     - sw2:e1-3
-  - endpoints:
-    - r3:e1-2
-    - sw3:e1-2
